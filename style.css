@@ -1,0 +1,53 @@
+ :root{
+  --bg-1:#071315;
+  --bg-2:#04211a;
+  --accent:#00d0b3;
+  --card:rgba(0,0,0,0.46);
+  --glass:rgba(255,255,255,0.03);
+  --text:#e9f6f2;
+  --muted:#bfeee5;
+}
+
+/* Reset e base */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:"Segoe UI", Roboto, Arial, sans-serif;background:linear-gradient(180deg,var(--bg-1),var(--bg-2));color:var(--text);-webkit-font-smoothing:antialiased}
+.container{max-width:1000px;margin:28px auto;padding:18px;border-radius:12px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));box-shadow:0 10px 40px rgba(0,0,0,0.6)}
+
+/* Cabeçalho / controles */
+header{display:flex;flex-direction:column;gap:12px}
+header h1{font-size:26px;color:#c9fff6}
+.top-controls{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.score-card{background:var(--card);padding:10px 12px;border-radius:8px;min-width:220px;border:1px solid var(--glass);box-shadow:0 6px 18px rgba(0,0,0,0.45)}
+.score-line{font-weight:700;color:var(--text);line-height:1.4}
+.buttons{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.buttons select,.buttons button{padding:8px 12px;border-radius:8px;border:none;cursor:pointer;background:linear-gradient(90deg,#0b3b34,#0f5b50);color:#dffbf2;font-size:14px;box-shadow:0 6px 14px rgba(0,0,0,0.4);transition:transform .12s ease}
+.buttons button:hover,.buttons select:hover{transform:translateY(-2px)}
+
+/* Board */
+.board{margin-top:12px;display:flex;justify-content:center;align-items:center}
+canvas{width:100%;max-width:960px;height:640px;border-radius:10px;background:transparent;display:block;box-shadow:0 8px 30px rgba(0,0,0,0.6),inset 0 0 40px rgba(0,200,150,0.03)}
+
+/* Info */
+.info{margin-top:14px;display:flex;gap:14px;flex-wrap:wrap}
+.about,.controls{flex:1;min-width:260px;background:var(--card);padding:12px;border-radius:10px;border:1px solid var(--glass)}
+.about h3,.controls h4{margin-bottom:8px;color:var(--muted)}
+
+/* Modal */
+.modal{position:fixed;inset:0;display:none;justify-content:center;align-items:center;background:rgba(0,0,0,0.6);z-index:60}
+.modal-content{background:linear-gradient(180deg,#081918,#052421);padding:20px;border-radius:10px;color:var(--text);min-width:300px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,0.7)}
+.modal-content button{margin-top:12px;padding:10px 14px;border-radius:8px;border:none;background:var(--accent);color:#012d26;cursor:pointer}
+
+/* HUD DOM */
+.hud{position:fixed;left:24px;top:28px;z-index:50}
+.hud .card{background:var(--card);padding:10px 12px;border-radius:8px;border:1px solid var(--glass);box-shadow:0 6px 18px rgba(0,0,0,0.5)}
+
+/* Focus */
+button:focus, select:focus { outline: 3px solid rgba(0,208,179,0.14); outline-offset:2px; }
+
+/* Responsividade */
+@media (max-width:800px){
+  .top-controls{flex-direction:column;align-items:flex-start}
+  canvas{height:520px}
+  .info{flex-direction:column}
+  .hud{left:12px;top:16px}
+}
