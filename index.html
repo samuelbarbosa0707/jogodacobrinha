@@ -7,14 +7,6 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="sons" style="display:none">
-    <audio id="eatSound" src="Sounds/eat1.mp3" preload="auto"></audio>
-    <audio id="gameOverSound" src="Sounds/gameover.mp3" preload="auto"></audio>
-    <audio id="startSound" src="Sounds/start.mp3" preload="auto"></audio>
-    <audio id="turnSound" src="Sounds/turn.mp3" preload="auto"></audio>
-    <audio id="crashSound" src="Sounds/crash.mp3" preload="auto"></audio>
-  </div>
-
   <main class="container">
     <header>
       <h1>🐍 Snake Legends</h1>
@@ -23,32 +15,39 @@
           <div class="score-line">Jogador 1: <span id="score1">0</span></div>
           <div class="score-line">Jogador 2: <span id="score2">0</span></div>
         </div>
-
         <div class="buttons">
-          <select id="difficulty" aria-label="Dificuldade">
+          <select id="playerMode">
+            <option value="1">1 Jogador</option>
+            <option value="2" selected>2 Jogadores</option>
+          </select>
+          <select id="difficulty">
             <option value="150">Fácil</option>
             <option value="100" selected>Médio</option>
             <option value="60">Difícil</option>
           </select>
-          <button id="soundToggleBtn" type="button">🔊 Som</button>
-          <button id="startBtn" type="button">▶️ Iniciar</button>
-          <button id="pauseBtn" type="button">⏸️ Pausar</button>
+          <button id="soundToggleBtn">🔊 Som</button>
+          <button id="startBtn">▶️ Iniciar</button>
+          <button id="pauseBtn">⏸️ Pausar</button>
         </div>
       </div>
     </header>
 
     <section class="board">
-      <canvas id="gameCanvas" aria-label="Área do jogo"></canvas>
+      <canvas id="gameCanvas"></canvas>
     </section>
 
     <section class="info">
       <div class="about">
         <h3>Como jogar</h3>
-        <p>Jogador 1: W A S D. Jogador 2: setas. Espaço = pausar, R = reiniciar.</p>
+        <p>Use W A S D (Jogador 1) e setas (Jogador 2).  
+        Espaço = pausar, R = reiniciar.  
+        Primeiro a 10 pontos vence.</p>
       </div>
       <div class="controls">
         <h4>Objetivo</h4>
-        <p>Coma a comida vermelha para ganhar pontos. Evite obstáculos, bordas e a outra cobra.</p>
+        <p>Coma a comida vermelha para marcar pontos.  
+        Evite árvores, bordas e a outra cobra.  
+        O jogo para ao atingir 10 pontos.</p>
       </div>
     </section>
   </main>
@@ -56,8 +55,16 @@
   <div id="gameOverModal" class="modal" aria-hidden="true">
     <div class="modal-content">
       <h2 id="gameOverMessage">Fim de Jogo!</h2>
-      <button id="restartBtn" type="button">🔄 Jogar Novamente</button>
+      <button id="restartBtn">🔄 Jogar Novamente</button>
     </div>
+  </div>
+
+  <div id="sons" style="display:none">
+    <audio id="eatSound" src="Sounds/eat1.mp3" preload="auto"></audio>
+    <audio id="gameOverSound" src="Sounds/gameover.mp3" preload="auto"></audio>
+    <audio id="startSound" src="Sounds/start.mp3" preload="auto"></audio>
+    <audio id="turnSound" src="Sounds/turn.mp3" preload="auto"></audio>
+    <audio id="crashSound" src="Sounds/crash.mp3" preload="auto"></audio>
   </div>
 
   <script src="script.js"></script>

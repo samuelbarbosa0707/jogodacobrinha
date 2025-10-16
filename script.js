@@ -1,297 +1,319 @@
- // References (assumes index.html has the matching IDs)
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-const score1Span = document.getElementById('score1');
-const score2Span = document.getElementById('score2');
-const startBtn = document.getElementById('startBtn');
-const pauseBtn = document.getElementById('pauseBtn');
-const soundToggleBtn = document.getElementById('soundToggleBtn');
-const gameOverModal = document.getElementById('gameOverModal');
-const gameOverMessage = document.getElementById('gameOverMessage');
-const restartBtn = document.getElementById('restartBtn');
+ // script.js
 
-// Audio elements (optional — ensure files exist)
-const eatSound = document.getElementById('eatSound');
+// =====  DOM References  =====
+const canvas      = document.getElementById('gameCanvas');
+const ctx         = canvas.getContext('2d');
+const score1El    = document.getElementById('score1');
+const score2El    = document.getElementById('score2');
+const startBtn    = document.getElementById('startBtn');
+const pauseBtn    = document.getElementById('pauseBtn');
+const soundBtn    = document.getElementById('soundToggleBtn');
+const modeSel     = document.getElementById('playerMode');
+const diffSel     = document.getElementById('difficulty');
+const modal       = document.getElementById('gameOverModal');
+const msgEl       = document.getElementById('gameOverMessage');
+const restartBtn  = document.getElementById('restartBtn');
+
+// =====  Audio Elements  =====
+const eatSound      = document.getElementById('eatSound');
 const gameOverSound = document.getElementById('gameOverSound');
-const startSound = document.getElementById('startSound');
-const turnSound = document.getElementById('turnSound');
-const crashSound = document.getElementById('crashSound');
-const allSounds = [eatSound, gameOverSound, startSound, turnSound, crashSound].filter(Boolean);
-allSounds.forEach(s => s.volume = 0.5);
+const startSound    = document.getElementById('startSound');
+const turnSound     = document.getElementById('turnSound');
+let soundOn = true;
 
-// Sound control
-let soundEnabled = localStorage.getItem('soundEnabled') !== 'false';
-function updateSoundButton(){ if(soundToggleBtn) soundToggleBtn.textContent = soundEnabled ? '🔊 Som' : '🔇 Som'; }
-updateSoundButton();
-function toggleSound(){ soundEnabled = !soundEnabled; localStorage.setItem('soundEnabled', soundEnabled); updateSoundButton(); }
-function stopAllSounds(){ allSounds.forEach(s => { try{ s.pause(); s.currentTime = 0; } catch{} }); }
-function playSound(sound, cutOthers = true){ if(!soundEnabled || !sound) return; if(cutOthers) stopAllSounds(); try{ sound.currentTime = 0; sound.play(); } catch{} }
+function toggleSound() {
+  soundOn = !soundOn;
+  soundBtn.textContent = soundOn ? '🔊 Som' : '🔇 Sem Som';
+}
 
-// Canvas sizing (crisp on HiDPI)
-function resizeCanvas(){
-  const rect = canvas.getBoundingClientRect();
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  canvas.width = Math.floor(rect.width * dpr);
-  canvas.height = Math.floor(rect.height * dpr);
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+function playSound(s) {
+  if (!soundOn || !s) return;
+  s.currentTime = 0;
+  s.play().catch(() => {});
+}
+
+// =====  Constants  =====
+const MAX_SCORE = 10;
+
+// =====  Game State  =====
+let grid, speed, players, running;
+let snakes, dirs, food, trees, scores;
+
+// =====  Setup & Resize Canvas  =====
+function resizeCanvas() {
+  canvas.width  = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
 }
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// Game state
-const grid = 20;
-let snake1 = [], snake2 = [];
-let dir1 = 'RIGHT', dir2 = 'LEFT';
-let food = null;
-let obstacles = [];
-let score1 = 0, score2 = 0;
-let speed = 100;
-let isRunning = false;
-let lastTime = 0;
-let particles = [];
-
-// Utilities
-function randomGridPosition(){
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const cols = Math.floor((canvas.width / dpr) / grid);
-  const rows = Math.floor((canvas.height / dpr) / grid);
-  return { x: Math.floor(Math.random() * cols) * grid, y: Math.floor(Math.random() * rows) * grid };
-}
-function posEqual(a,b){ return a && b && a.x === b.x && a.y === b.y; }
-function occupied(pos){
-  if(!pos) return false;
-  for(const s of snake1) if(s.x===pos.x && s.y===pos.y) return true;
-  for(const s of snake2) if(s.x===pos.x && s.y===pos.y) return true;
-  for(const o of obstacles) if(o.x===pos.x && o.y===pos.y) return true;
-  return false;
+// =====  Helpers  =====
+function randPos() {
+  const cols = Math.floor(canvas.width / grid);
+  const rows = Math.floor(canvas.height / grid);
+  return {
+    x: Math.floor(Math.random() * cols) * grid,
+    y: Math.floor(Math.random() * rows) * grid
+  };
 }
 
-// Spawn safe
-function spawnFood(){
-  let p, attempts = 0;
-  do { p = randomGridPosition(); attempts++; if(attempts>500) break; } while(occupied(p));
+function occupied(x, y) {
+  // check snake1
+  if (snakes[0].some(s => s.x === x && s.y === y)) return true;
+  // check snake2 only if in 2-player mode
+  if (players === 2 && snakes[1].some(s => s.x === x && s.y === y)) return true;
+  // check trees
+  if (trees.some(t => t.x === x && t.y === y)) return true;
+  // check food
+  return food && food.x === x && food.y === y;
+}
+
+// =====  Spawn Obstacles & Food  =====
+function placeTrees(count = 12) {
+  trees = [];
+  while (trees.length < count) {
+    const p = randPos();
+    if (!occupied(p.x, p.y)) trees.push(p);
+  }
+}
+
+function placeFood() {
+  let p;
+  do {
+    p = randPos();
+  } while (occupied(p.x, p.y));
   food = p;
 }
-function spawnObstacles(count = 10){
-  obstacles = [];
-  let attempts = 0;
-  while(obstacles.length < count && attempts < count * 30){
-    const p = randomGridPosition();
-    if(!occupied(p)) obstacles.push(p);
-    attempts++;
+
+// =====  Draw Functions  =====
+function drawBackground() {
+  const w = canvas.width,
+        h = canvas.height;
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, '#04211a');
+  grad.addColorStop(1, '#0a2b20');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  ctx.fillStyle = 'rgba(0,150,100,0.1)';
+  for (let i = 0; i < 80; i++) {
+    const x = Math.random() * w,
+          y = Math.random() * h;
+    ctx.beginPath();
+    ctx.arc(x, y, Math.random() * 3 + 1, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
-// Particles (visual) — simple and cheap
-function spawnParticles(x,y,color='255,255,255'){
-  for(let i=0;i<10;i++){
-    particles.push({
-      x, y,
-      vx: (Math.random()-0.5)*2,
-      vy: (Math.random()-1.5)*2,
-      life: 30 + Math.random()*20,
-      color
-    });
-  }
-}
-function updateParticles(){
-  for(let i = particles.length-1; i>=0; i--){
-    const p = particles[i];
-    p.x += p.vx; p.y += p.vy; p.vy += 0.06; p.life--;
-    if(p.life <= 0) particles.splice(i,1);
-  }
-}
-function drawParticles(){
-  for(const p of particles){
-    ctx.fillStyle = `rgba(${p.color},${Math.max(0, p.life/50)})`;
-    ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1, p.life/10), 0, Math.PI*2); ctx.fill();
+function drawTrees() {
+  for (const t of trees) {
+    // trunk
+    ctx.fillStyle = '#5b3a29';
+    ctx.fillRect(t.x + grid/2 - 4, t.y + grid/2, 8, grid/2);
+    // foliage
+    ctx.fillStyle = '#2e8b57';
+    ctx.beginPath();
+    ctx.arc(t.x + grid/2, t.y + grid/2, grid/2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#3cb371';
+    ctx.beginPath();
+    ctx.arc(t.x + grid/2, t.y + grid/2 - 6, grid/3, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
-// Drawing helpers
-function clearAndBackground(){
-  const w = canvas.width / Math.max(1, window.devicePixelRatio || 1);
-  const h = canvas.height / Math.max(1, window.devicePixelRatio || 1);
-  const grad = ctx.createLinearGradient(0,0,0,h);
-  grad.addColorStop(0, '#133a2f'); grad.addColorStop(1, '#0a2b20');
-  ctx.fillStyle = grad; ctx.fillRect(0,0,w,h);
-}
-function drawGrid(){
-  ctx.save();
-  ctx.strokeStyle = 'rgba(255,255,255,0.03)'; ctx.lineWidth = 1;
-  const w = canvas.width / Math.max(1, window.devicePixelRatio || 1);
-  const h = canvas.height / Math.max(1, window.devicePixelRatio || 1);
-  for(let x=0;x<w;x+=grid){ ctx.beginPath(); ctx.moveTo(x+0.5,0); ctx.lineTo(x+0.5,h); ctx.stroke(); }
-  for(let y=0;y<h;y+=grid){ ctx.beginPath(); ctx.moveTo(0,y+0.5); ctx.lineTo(w,y+0.5); ctx.stroke(); }
-  ctx.restore();
-}
-function drawFood(){
-  if(!food) return;
-  ctx.save();
-  ctx.fillStyle = 'rgba(0,0,0,0.16)';
-  ctx.beginPath(); ctx.ellipse(food.x + grid/2, food.y + grid/2 + 4, grid/3, grid/7, 0, 0, Math.PI*2); ctx.fill();
+function drawFood() {
   ctx.fillStyle = '#ff4d4d';
-  ctx.beginPath(); ctx.arc(food.x + grid/2, food.y + grid/2 - 2, Math.max(4, grid/2 - 4), 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  ctx.beginPath(); ctx.arc(food.x + grid/2 - 4, food.y + grid/2 - 6, 3, 0, Math.PI*2); ctx.fill();
-  ctx.restore();
+  ctx.beginPath();
+  ctx.arc(food.x + grid/2, food.y + grid/2, grid/2, 0, Math.PI * 2);
+  ctx.fill();
 }
-function drawObstacles(){
-  ctx.save();
-  for(const o of obstacles){
-    ctx.fillStyle = '#5b2f0a'; ctx.fillRect(o.x + 6, o.y + 10, 8, 10);
-    ctx.fillStyle = '#2e8b57'; ctx.beginPath(); ctx.ellipse(o.x + grid/2, o.y + grid/2 - 6, grid/2 + 4, grid/2 - 2, 0, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#3cb371'; ctx.beginPath(); ctx.ellipse(o.x + grid/2, o.y + grid/2 - 8, grid/2 - 1, grid/2 - 3, 0, 0, Math.PI*2); ctx.fill();
-  }
-  ctx.restore();
-}
-function hexToRgb(hex){ const n = parseInt(hex.replace('#',''),16); return `${(n>>16)&255},${(n>>8)&255},${n&255}`; }
-function drawSnake(snake, baseColor, headColor){
-  if(!snake || snake.length === 0) return;
-  for(let i = snake.length - 1; i >= 0; i--){
-    const seg = snake[i];
-    const t = i / Math.max(1, snake.length - 1);
-    const alpha = 0.55 + 0.45 * (1 - t);
-    ctx.fillStyle = i === 0 ? headColor : `rgba(${hexToRgb(baseColor)},${alpha})`;
-    ctx.beginPath(); ctx.arc(seg.x + grid/2, seg.y + grid/2, grid/2 - 1, 0, Math.PI*2); ctx.fill();
-    if(i === 0){
-      ctx.save(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(seg.x + grid/2, seg.y + grid/2, grid/2 - 1, 0, Math.PI*2); ctx.stroke(); ctx.restore();
-    }
-  }
-}
-function updateHUD(){ if(score1Span) score1Span.textContent = score1; if(score2Span) score2Span.textContent = score2; }
 
-// Movement and collision
-function moveSnake(snake, dir){
+function drawSnake(snake, colorRGB) {
+  snake.forEach((seg, i) => {
+    const t = i / (snake.length - 1 || 1);
+    const a = 0.6 + 0.4 * (1 - t);
+    ctx.fillStyle = `rgba(${colorRGB[0]},${colorRGB[1]},${colorRGB[2]},${a})`;
+    ctx.fillRect(seg.x + 2, seg.y + 2, grid - 4, grid - 4);
+  });
+}
+
+// =====  Score Display  =====
+function updateScores() {
+  score1El.textContent = scores[0];
+  score2El.textContent = players === 2 ? scores[1] : '-';
+}
+
+// =====  Movement & Collisions  =====
+function moveSnake(snake, dir, idx) {
   const head = { ...snake[0] };
-  if(dir === 'UP') head.y -= grid;
-  if(dir === 'DOWN') head.y += grid;
-  if(dir === 'LEFT') head.x -= grid;
-  if(dir === 'RIGHT') head.x += grid;
+  if (dir === 'UP')    head.y -= grid;
+  if (dir === 'DOWN')  head.y += grid;
+  if (dir === 'LEFT')  head.x -= grid;
+  if (dir === 'RIGHT') head.x += grid;
   snake.unshift(head);
-  return head;
-}
-function checkCollision(head, snake){
-  if(!head) return false;
-  const w = Math.floor((canvas.width / Math.max(1, window.devicePixelRatio || 1)));
-  const h = Math.floor((canvas.height / Math.max(1, window.devicePixelRatio || 1)));
-  if(head.x < 0 || head.y < 0 || head.x >= w || head.y >= h) return true;
-  if(snake.slice(1).some(seg => seg.x === head.x && seg.y === head.y)) return true;
-  if(obstacles.some(o => o.x === head.x && o.y === head.y)) return true;
-  return false;
-}
 
-// Game loop
-function loop(ts){
-  if(!isRunning) return;
-  if(!lastTime) lastTime = ts;
-  if(ts - lastTime > speed){
-    lastTime = ts;
-    const head1 = moveSnake(snake1, dir1);
-    const head2 = moveSnake(snake2, dir2);
-
-    // eating
-    if(posEqual(head1, food)){ score1++; playSound(eatSound, false); spawnFood(); spawnParticles(head1.x + grid/2, head1.y + grid/2); } else snake1.pop();
-    if(posEqual(head2, food)){ score2++; playSound(eatSound, false); spawnFood(); spawnParticles(head2.x + grid/2, head2.y + grid/2, '255,220,100'); } else snake2.pop();
-
-    // collisions
-    if(checkCollision(head1, snake1) || snake2.some(s => s.x === head1.x && s.y === head1.y)){
-      stopAllSounds(); playSound(crashSound, false); setTimeout(()=>{ playSound(gameOverSound, false); }, 300); endGame('Jogador 1 perdeu!'); return;
+  // eating
+  if (head.x === food.x && head.y === food.y) {
+    playSound(eatSound);
+    scores[idx]++;
+    if (scores[idx] >= MAX_SCORE) {
+      endGame();
+      return;
     }
-    if(checkCollision(head2, snake2) || snake1.some(s => s.x === head2.x && s.y === head2.y)){
-      stopAllSounds(); playSound(crashSound, false); setTimeout(()=>{ playSound(gameOverSound, false); }, 300); endGame('Jogador 2 perdeu!'); return;
-    }
-    if(head1.x === head2.x && head1.y === head2.y){
-      stopAllSounds(); playSound(crashSound, false); setTimeout(()=>{ playSound(gameOverSound, false); }, 300); endGame('Empate! As cobras colidiram.'); return;
-    }
-
-    updateParticles();
-    // draw
-    clearAndBackground();
-    drawGrid();
-    drawObstacles();
-    drawFood();
-    drawSnake(snake1, '#0099cc', '#00e6ff');
-    drawSnake(snake2, '#cc9900', '#fff000');
-    drawParticles();
-    updateHUD();
+    placeFood();
+  } else {
+    snake.pop();
   }
-  requestAnimationFrame(loop);
+
+  // wall collision
+  if (
+    head.x < 0 ||
+    head.y < 0 ||
+    head.x >= canvas.width ||
+    head.y >= canvas.height
+  ) {
+    endGame();
+    return;
+  }
+
+  // self collision
+  for (let i = 1; i < snake.length; i++) {
+    if (head.x === snake[i].x && head.y === snake[i].y) {
+      endGame();
+      return;
+    }
+  }
+
+  // tree collision
+  if (trees.some(t => t.x === head.x && t.y === head.y)) {
+    endGame();
+    return;
+  }
+
+  // opponent collision
+  if (players === 2) {
+    const other = snakes[1 - idx];
+    if (other.some(o => o.x === head.x && o.y === head.y)) {
+      endGame();
+    }
+  }
 }
 
-// Start / end / pause
-function startGame(){
-  if(isRunning) return;
-  resizeCanvas();
-  speed = parseInt(document.getElementById('difficulty')?.value) || 100;
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const cols = Math.floor((canvas.width / dpr) / grid);
-  const rows = Math.floor((canvas.height / dpr) / grid);
+// =====  Game Loop  =====
+function gameLoop() {
+  if (!running) return;
+  moveSnake(snakes[0], dirs[0], 0);
+  if (players === 2) moveSnake(snakes[1], dirs[1], 1);
 
-  // safe initial snakes
-  snake1 = [
-    { x: Math.min(2*grid, (cols-1)*grid), y: Math.min(2*grid, (rows-1)*grid) },
-    { x: Math.min(1*grid, (cols-1)*grid), y: Math.min(2*grid, (rows-1)*grid) },
-    { x: Math.min(0*grid, (cols-1)*grid), y: Math.min(2*grid, (rows-1)*grid) },
-    { x: Math.max(0, Math.min(-1*grid + grid, (cols-1)*grid)), y: Math.min(2*grid, (rows-1)*grid) }
+  drawBackground();
+  drawTrees();
+  drawFood();
+  drawSnake(snakes[0], [0, 208, 179]);
+  if (players === 2) drawSnake(snakes[1], [255, 77, 77]);
+  updateScores();
+
+  setTimeout(gameLoop, speed);
+}
+
+// =====  Controls  =====
+function startGame() {
+  grid   = 20;
+  players= parseInt(modeSel.value, 10);
+  speed  = parseInt(diffSel.value, 10);
+  running= true;
+
+  // initialize snakes
+  snakes = [
+    [{ x: grid * 5,  y: grid * 5 }],
+    []
   ];
-  snake2 = [
-    { x: Math.max(0, (cols-3)*grid), y: Math.max(0,(rows-3)*grid) },
-    { x: Math.max(0, (cols-2)*grid), y: Math.max(0,(rows-3)*grid) },
-    { x: Math.max(0, (cols-1)*grid), y: Math.max(0,(rows-3)*grid) },
-    { x: Math.min((cols)*grid, (cols-1)*grid), y: Math.max(0,(rows-3)*grid) }
-  ];
-  dir1 = 'RIGHT'; dir2 = 'LEFT';
-  score1 = 0; score2 = 0;
-  spawnFood();
-  spawnObstacles(10);
-  particles = [];
-  isRunning = true;
-  lastTime = 0;
-  stopAllSounds(); playSound(startSound, true);
-  gameOverModal.style.display = 'none';
-  updateHUD();
-  requestAnimationFrame(loop);
-}
-function endGame(message){
-  isRunning = false;
-  lastTime = 0;
-  gameOverMessage.textContent = message;
-  gameOverModal.style.display = 'flex';
-  stopAllSounds();
-}
-function togglePause(){
-  if(!isRunning){ startGame(); return; }
-  isRunning = !isRunning;
-  if(isRunning){ lastTime = 0; requestAnimationFrame(loop); } else { stopAllSounds(); }
+  if (players === 2) {
+    snakes[1] = [{ x: grid * 15, y: grid * 15 }];
+  }
+
+  dirs   = ['RIGHT', 'LEFT'];
+  scores = [0, 0];
+
+  placeTrees();
+  placeFood();
+  updateScores();
+
+  modal.style.display = 'none';
+  playSound(startSound);
+  gameLoop();
 }
 
-// Keyboard controls
-document.addEventListener('keydown', e=>{
-  const k = e.key;
-  if((k === 'w' || k === 'W') && dir1 !== 'DOWN') { dir1 = 'UP'; playSound(turnSound, false); }
-  if((k === 's' || k === 'S') && dir1 !== 'UP') { dir1 = 'DOWN'; playSound(turnSound, false); }
-  if((k === 'a' || k === 'A') && dir1 !== 'RIGHT') { dir1 = 'LEFT'; playSound(turnSound, false); }
-  if((k === 'd' || k === 'D') && dir1 !== 'LEFT') { dir1 = 'RIGHT'; playSound(turnSound, false); }
+function resetGame() {
+  if (running) {
+    running = false;
+  }
+  startGame();
+}
 
-  if(k === 'ArrowUp' && dir2 !== 'DOWN') { dir2 = 'UP'; playSound(turnSound, false); }
-  if(k === 'ArrowDown' && dir2 !== 'UP') { dir2 = 'DOWN'; playSound(turnSound, false); }
-  if(k === 'ArrowLeft' && dir2 !== 'RIGHT') { dir2 = 'LEFT'; playSound(turnSound, false); }
-  if(k === 'ArrowRight' && dir2 !== 'LEFT') { dir2 = 'RIGHT'; playSound(turnSound, false); }
+function togglePause() {
+  running = !running;
+  if (running) gameLoop();
+}
 
-  if(k === ' ') { e.preventDefault(); togglePause(); }
-  if(k === 'r' || k === 'R'){ gameOverModal.style.display = 'none'; startGame(); }
+function endGame() {
+  if (!running) return;
+  running = false;
+  playSound(gameOverSound);
+
+  if (players === 2) {
+    if (scores[0] > scores[1]) msgEl.textContent = '🏆 Jogador 1 vence!';
+    else if (scores[1] > scores[0]) msgEl.textContent = '🏆 Jogador 2 vence!';
+    else msgEl.textContent = '🤝 Empate!';
+  } else {
+    msgEl.textContent = '🏁 Você alcançou 10 pontos!';
+  }
+
+  modal.style.display = 'flex';
+}
+
+// =====  Event Listeners  =====
+startBtn.addEventListener('click', () => {
+  if (!running) startGame();
+});
+pauseBtn.addEventListener('click', togglePause);
+restartBtn.addEventListener('click', resetGame);
+soundBtn.addEventListener('click', toggleSound);
+
+modeSel.addEventListener('change', () => {
+  // just update mode; next start uses it
+  players = parseInt(modeSel.value, 10);
+});
+diffSel.addEventListener('change', () => {
+  speed = parseInt(diffSel.value, 10);
 });
 
-// DOM buttons
-if(startBtn) startBtn.addEventListener('click', ()=>{ gameOverModal.style.display = 'none'; startGame(); });
-if(pauseBtn) pauseBtn.addEventListener('click', togglePause);
-if(soundToggleBtn) soundToggleBtn.addEventListener('click', toggleSound);
-if(restartBtn) restartBtn.addEventListener('click', ()=>{ gameOverModal.style.display = 'none'; startGame(); });
-
-// Initial draw (visual only)
-clearAndBackground();
-drawGrid();
-drawObstacles();
-drawFood();
-updateHUD();
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === ' ') {
+    togglePause();
+    return;
+  }
+  if (k === 'r') {
+    resetGame();
+    return;
+  }
+  // player 1 controls
+  if (['w','a','s','d'].includes(k)) {
+    dirs[0] = k === 'w' ? 'UP'
+            : k === 's' ? 'DOWN'
+            : k === 'a' ? 'LEFT'
+            : 'RIGHT';
+    playSound(turnSound);
+  }
+  // player 2 controls
+  if (players === 2) {
+    if (['arrowup','arrowdown','arrowleft','arrowright'].includes(e.key)) {
+      dirs[1] = e.key === 'ArrowUp'    ? 'UP'
+              : e.key === 'ArrowDown'  ? 'DOWN'
+              : e.key === 'ArrowLeft'  ? 'LEFT'
+              : 'RIGHT';
+      playSound(turnSound);
+    }
+  }
+});
